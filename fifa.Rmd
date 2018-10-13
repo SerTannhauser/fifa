@@ -1,0 +1,185 @@
+---
+title: "FIFA Rankings"
+author: "YYC"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, warning=FALSE, message = FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(shiny)
+library(rsconnect)
+rsconnect::setAccountInfo(name='tannhauser',
+			  token='BAE50659F928DCB45C85CED1A1A1DC49',
+			  secret='WVmGACkj2a9GBwpwQep9KQVMyY7gCDWfHR97dSo8')
+library(gridExtra)
+library(RColorBrewer)
+library(ggthemes)
+library(reshape2)
+library(gridExtra)
+library(rworldmap)
+
+fifa_ranking$region <- tolower(fifa_ranking$country_full)
+fifa_ranking[fifa_ranking$region == 'antigua and barbuda','region'] <- 'antigua'
+fifa_ranking[fifa_ranking$region == 'brunei darussalam','region'] <- 'brunei'
+fifa_ranking[fifa_ranking$region == 'cape verde islands','region'] <- 'cape verde'
+fifa_ranking[fifa_ranking$region == "china pr","region"] <- 'china'
+fifa_ranking[fifa_ranking$region == "côte d'ivoire","region"] <- "ivory coast"
+fifa_ranking[fifa_ranking$region == "congo dr","region"] <- 'democratic republic of the congo'
+fifa_ranking[fifa_ranking$region == "congo","region"] <- 'republic of congo'
+fifa_ranking[fifa_ranking$region == "chinese taipei","region"] <-"taiwan"
+fifa_ranking[fifa_ranking$region == "fyr macedonia","region"] <- 'macedonia'
+fifa_ranking[fifa_ranking$region == "ir iran","region"] <- 'iran'
+fifa_ranking[fifa_ranking$region == "korea dpr","region"] <- 'north korea'
+fifa_ranking[fifa_ranking$region == "korea republic","region"] <- 'south korea'
+fifa_ranking[fifa_ranking$region == "kyrgyz republic","region"] <- 'kyrgyzstan'
+fifa_ranking[fifa_ranking$region == "northern ireland","region"] <- 'ireland'
+fifa_ranking <- subset(fifa_ranking, fifa_ranking$region != "republic of ireland")
+fifa_ranking <- subset(fifa_ranking, fifa_ranking$region != "wales")
+fifa_ranking[fifa_ranking$region == "trinidad and tobago","region"] <- 'trinidad'
+fifa_ranking[fifa_ranking$region == "england","region"] <- 'uk'
+
+data(fifa_ranking)
+fifa_ranking %>%
+  select(., rank, country_full, country_abrv, total_points, confederation, rank_date, region) -> fifa
+fifa
+fifa %>% 
+  mutate(rank_date = as.Date(rank_date, format = "%m/%d/%Y")) %>%
+  filter(rank_date > "2011-07-27") %>%
+  mutate(rank = as.numeric(as.character(rank))) %>%
+  arrange(., rank_date, desc(rank)) -> fifa2
+fifa2$rank_date_year <- format(as.Date(fifa2$rank_date, format = "%Y-%m-%d"), "%Y")
+fifa2 %>%
+  filter(rank < 6) -> fifa3
+f <- ggplot(data = fifa3, aes(x = rank_date, y = rank)) + geom_line(aes(colour = country_abrv))
+f
+
+```
+
+
+```{r kernal}
+
+last_ranking <- data.frame(fifa2 %>% 
+                             dplyr::filter(rank_date == '6/7/2018') %>% 
+                             dplyr::select(country_full, country_abrv, confederation, rank, total_points) %>%
+                             arrange(region))
+countries_map <- map_data("world")
+countries_map$region <- tolower(countries_map$region)
+res <- data.frame(left_join(countries_map, last_ranking %>% select(region, confederation), by = 'region'))
+
+histo <- last_ranking %>%
+  ggplot(aes(x = reorder(region, -rank), y = total_points,fill=confederation)) +
+  geom_bar(stat = 'identity') + coord_flip() + theme_economist(10) + 
+  scale_fill_brewer(name = '', palette = 'Paired') + 
+  theme(legend.position = 'None', 
+        panel.grid.major.y = element_blank()) +
+  labs(title = 'Point Coefficients of the 211 members of FIFA',
+       subtitle = 'as of June 2018')
+
+map <- ggplot(res) + 
+  geom_polygon(aes(x = long, y = lat,group = group, fill = confederation)) + 
+  theme_economist() + 
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(), 
+    legend.text = element_text(size = 10),legend.key.size = unit(.3, "cm")) +
+  scale_fill_brewer(name = '',palette = 'Paired', na.value = 'black') +
+  coord_fixed(1.3) + labs(subtitle = 'Map of the World with the Six Confederations')
+
+histo
+map
+histo + annotation_custom(ggplotGrob(map), xmin = 0, xmax = 100, ymin =300, ymax = 1700)
+
+last_ranking %>% 
+  ggplot(aes(x = reorder(region, -rank), y = total_points, fill = confederation)) +
+  geom_bar(stat = 'identity') + coord_flip() + theme_economist(10) + 
+  scale_fill_brewer(name = '', palette = 'Paired') + 
+  theme(legend.position= 'None', 
+        panel.grid.major.y = element_blank()) +
+  labs(title = 'Coefficient Rank of the 211 mermbers of FIFA',
+       subtitle = 'as of June 2018') + facet_wrap(~confederation, scales='free')
+
+
+```
+
+
+```{r}
+
+rank_coefficient <- last_ranking %>% 
+  group_by(confederation) %>% 
+  ggplot(aes(x = reorder(confederation, total_points, FUN = mean), y = total_points, fill = confederation)) + 
+  geom_boxplot(alpha=.75,size=.25) + 
+  geom_jitter(shape = 16, position = position_jitter(0.2), size = 1, alpha = .25) +
+  theme_fivethirtyeight() + theme(legend.position = 'None') + 
+  scale_fill_brewer(name = '', palette = 'Paired') + 
+  coord_flip() + 
+  labs(title = 'Confederation average coefficient')
+rank_coefficient
+confed_ranking <- last_ranking %>% 
+  group_by(confederation) %>% 
+  ggplot(aes(x = reorder(confederation, -rank, FUN = mean), y = rank, fill = confederation)) +
+  geom_boxplot(alpha = .75, size = .25) + 
+  geom_jitter(shape = 16, position = position_jitter(0.2), size = 1, alpha = .25) +
+  theme_fivethirtyeight() + 
+  theme(legend.position = 'None') + 
+  scale_fill_brewer(name = '', palette = 'Paired') + coord_flip() + labs(title = 'Confederation average ranking')
+confed_ranking
+
+
+```
+
+
+```{r}
+
+makeHistoryRank <- function(conf){
+    temp <- data.frame(fifa2 %>%
+                         filter(confederation == conf) %>%
+                         group_by(rank_date_year, region) %>%
+                         summarise(meanRank = mean(rank)))
+    totRegions <- length(unique(temp$region))
+    totCols <- 4
+    if(totRegions < 12){
+      totCols <- 4
+    }
+    else{
+      totCols<-6
+    }
+    mycols <- colorRampPalette(brewer.pal(11, 'Paired'))(totRegions)
+    hist <- temp %>% ggplot(aes(x = rank_date_year, y = meanRank, color = meanRank)) + 
+      geom_line(aes(group = 1), alpha = 1, size =1.) +
+      theme_fivethirtyeight(8) +
+      scale_y_reverse() + ylim(220, 0) + 
+      labs(title = paste0('Average ranking since 2011 for countries in the ', conf)) +
+      facet_wrap(~ region, ncol = totCols) + 
+      scale_color_gradientn(colours = viridis::viridis(20)) + 
+      guides(color = F)
+    return(hist)
+}
+
+mylist <- list()
+cnt <- 0
+totConfederations <- sort(unique(fifa2$confederation))
+for(conf in totConfederations){
+  cnt <- cnt+1
+  mylist[[cnt]] <- makeHistoryRank(conf)
+}
+
+mylist[[1]]
+mylist[[2]]
+mylist[[3]]
+mylist[[4]]
+mylist[[5]]
+mylist[[6]]
+
+```
+
+
+
