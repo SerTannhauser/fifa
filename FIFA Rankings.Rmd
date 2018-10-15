@@ -1,0 +1,129 @@
+---
+title: "FIFA Rankins"
+author: "YiYang Cao"
+date: "October 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## FIFA dataset
+
+```{r fifa_ranking, echo=FALSE}
+
+library(ggplot2)
+library(gridExtra)
+library(RColorBrewer)
+library(ggthemes)
+library(reshape2)
+library(gridExtra)
+library(rworldmap)
+
+data(fifa_ranking)
+
+fifa_ranking %>%
+  select(., rank, country_full, country_abrv, total_points, confederation, rank_date) -> fifa
+
+fifa %>% 
+  mutate(rank_date = as.Date(rank_date, format = "%m/%d/%Y")) %>%
+  filter(rank_date > "2011-07-27") %>%
+  mutate(rank = as.numeric(as.character(rank))) %>%
+  arrange(., rank_date, desc(rank)) -> fifa2
+
+last_ranking <- data.frame(fifa %>% 
+                             dplyr::filter(rank_date == '6/7/2018') %>% 
+                             dplyr::select(country_full, country_abrv, confederation, rank, total_points) %>%
+                             arrange(country_full))
+```
+
+## FIFA Histogram:
+
+```{r fifa, echo=FALSE}
+
+histo <- last_ranking %>%
+  ggplot(aes(x = reorder(country_full, -rank), y = total_points, fill = confederation)) +
+  geom_bar(stat = 'identity') + coord_flip() + theme_economist(10) + 
+  scale_fill_brewer(name = '', palette = 'Paired') + 
+  theme(legend.position = 'None', panel.grid.major.y = element_blank()) +
+  xlab("Country Name") + ylab("Points")
+
+last_ranking %>% 
+  ggplot(aes(x = reorder(country_full, -rank), y = total_points, fill = confederation)) +
+  geom_bar(stat = 'identity') + coord_flip() + theme_economist(10) + 
+  scale_fill_brewer(name = '', palette = 'Paired') + 
+  theme(legend.position= 'None', 
+        panel.grid.major.y = element_blank()) +
+  labs(title = 'Coefficient Rank of the 211 mermbers of FIFA',
+       subtitle = 'as of June 2018') + facet_wrap(~confederation, scales='free')
+
+```
+
+## Confederation Histogram:
+
+```{r confederation, echo=FALSE}
+
+rank_coefficient <- last_ranking %>% 
+  ggplot(aes(x = reorder(confederation, total_points, FUN = mean), y = total_points, fill = confederation)) +
+  geom_boxplot(alpha=.75,size=.25) +
+  geom_jitter(shape = 16, position = position_jitter(0.25), size = 1, alpha = .5) +
+  theme_fivethirtyeight() + theme(legend.position = 'None') +
+  scale_fill_discrete() +
+  coord_flip()
+
+confed_ranking <- last_ranking %>% 
+  ggplot(aes(x = reorder(confederation, -rank, FUN = mean), y = -rank, fill = confederation)) +
+  geom_boxplot(alpha=.75,size=.25) +
+  geom_jitter(shape = 16, position = position_jitter(0.25), size = 1, alpha = .5) +
+  theme_fivethirtyeight() + theme(legend.position = 'None') +
+  scale_fill_discrete() +
+  coord_flip()
+
+```
+
+## Confederation Comparison
+
+```{r confed, echo=FALSE}
+
+temp <- data.frame(fifa %>%
+                     filter(confederation == conf) %>%
+                     group_by(rank_date_year, country_full) %>%
+                     summarise(meanRank = mean(rank)))
+
+nation_confed <- temp %>%
+  filter(confederation == conf) %>%
+  group_by(rank_date_year, country_full) %>%
+  summarise(meanRank = mean(rank))
+
+nation_confed %>%
+  ggplot(aes(x = rank_date, y = meanRank, color = meanRank)) + 
+  geom_line(aes(group = 1), alpha = 1, size = 1.) + 
+  theme_fivethirtyeight(10) +
+  scale_y_reverse() + ylim(220, 0) +
+  facet_wrap(~ country_full, ncol = 4)
+
+
+```
+
+## Average Nation Ranking
+
+```{r confed, echo=FALSE}
+
+nation_rank <- (fifa %>%
+                  mutate(rank_date = as.Date(rank_date, format = "%m/%d/%Y"), "%Y") %>%
+                  mutate(country_full = as.character(country_full)) %>% 
+                  group_by(rank, rank_date, country_abrv, country_full) %>%
+                  summarise(meanRank = mean(rank)) %>%
+                  filter(meanRank < input$rank_max))
+
+nation_rank %>%
+  ggplot(aes(x = reorder(country_full, -rank), y = -meanRank, fill = country_full)) +
+  geom_boxplot(alpha = .75, size = .5) +
+  geom_jitter(shape = 16, position = position_jitter(0.2), size = 1, alpha = .5) +
+  theme_economist(8) + theme(legend.position = 'None') +
+  scale_fill_discrete() +
+  coord_flip() + 
+  xlab("Country") + ylab("Rank")
+
+```
